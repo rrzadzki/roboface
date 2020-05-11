@@ -9,6 +9,7 @@
 
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
+#include <TweenDuino.h>
 #include "features.h"
 #include "positions.h"
 #include "actions.h"
@@ -29,13 +30,14 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define USMIN  600 // This is the rounded 'minimum' microsecond length based on the minimum pulse of 150
 #define USMAX  2400 // This is the rounded 'maximum' microsecond length based on the maximum pulse of 600
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
-
+#define TIMELINE_SIZE 10 // for TweenDuino
 
 #define buffer_length 2
 char buffer[buffer_length];
 bool move = true;
 // our servo # counter
 uint8_t servonum = 0;
+int MOUTH_POS;
 
 // Some things for messaging
 byte CHANNEL_MASK = 0b10000000;
@@ -102,13 +104,14 @@ void loop() {
         log(" to " );
         //log(value);
         log("\n");
-        pwm.setPWM(channel, 0, map(
+        map(
             value,
             0,
             0x7f,
             featureMap[channel][0],
             featureMap[channel][1]
-          )
+          );
+        pwm.setPWM(channel, 0, 
         );
       }
     }
