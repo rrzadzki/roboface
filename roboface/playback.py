@@ -99,3 +99,4 @@ for i in range(len(positions)-1):
 		sleep(0.0005)
 		
 ser.write(eyes_open)
+

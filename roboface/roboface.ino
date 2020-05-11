@@ -1,3 +1,9 @@
+
+
+#include <Timeline.h>
+#include <Tween.h>
+#include <TweenDuino.h>
+
 /*************************************************** 
   Roboface (maybe HELPeR)'s firmware, this sketch
   receives instructions over serial to manipulate the
@@ -37,7 +43,9 @@ char buffer[buffer_length];
 bool move = true;
 // our servo # counter
 uint8_t servonum = 0;
-int MOUTH_POS;
+
+TweenDuino::Tween *mouthTween;
+float mouthPos = MOUTH_CLOSED;
 
 // Some things for messaging
 byte CHANNEL_MASK = 0b10000000;
@@ -46,6 +54,8 @@ byte channel_indicator = 10;
 void setup() {
   Serial.begin(115200);
   Serial.println("8 channel Servo test!");
+
+  mouthTween = TweenDuino::Tween::to(mouthPos, 5000UL, MOUTH_OPEN);
 
   pwm.begin();
   // In theory the internal oscillator is 25MHz but it really isn't
@@ -74,6 +84,10 @@ void setServoPulse(uint8_t n, double pulse) {
 }
 
 void loop() {
+  mouthTween->update(millis());
+  pwm.setPWM(MOUTH, 0, (int)mouthPos);
+  
+  /*
   if(Serial.available() > 0) {
     int count = Serial.readBytes(buffer,buffer_length);
     byte channel = -1;
@@ -104,18 +118,19 @@ void loop() {
         log(" to " );
         //log(value);
         log("\n");
-        map(
+        int pos = map(
             value,
             0,
             0x7f,
             featureMap[channel][0],
             featureMap[channel][1]
           );
-        pwm.setPWM(channel, 0, 
+        pwm.setPWM(channel, 0, pos);
         );
       }
     }
   }
+  */
 }
 
 void blink() {
