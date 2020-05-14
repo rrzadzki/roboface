@@ -1,5 +1,4 @@
-
-
+#include <ArduinoQueue.h>
 #include <Timeline.h>
 #include <Tween.h>
 #include <TweenDuino.h>
@@ -11,7 +10,7 @@
  ****************************************************/
 
 // Uncomment this line for serial debugging
-//#define DEBUG
+#define DEBUG
 
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
@@ -19,6 +18,7 @@
 #include "features.h"
 #include "positions.h"
 #include "actions.h"
+#include "Feature.h"
 
 // called this way, it uses the default address 0x40
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
@@ -38,24 +38,76 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 #define TIMELINE_SIZE 10 // for TweenDuino
 
+#define FRAME_STOP_INDICATOR 0xff
+#define PLAY 0xfe
+#define STOP 0xfd
+
+/*
+ * For the serial input buffer
+ */
 #define buffer_length 2
 char buffer[buffer_length];
-bool move = true;
-// our servo # counter
-uint8_t servonum = 0;
 
-TweenDuino::Tween *mouthTween;
-float mouthPos = MOUTH_CLOSED;
+/*
+ * All the face's features. The order of this array MUST
+ * match the channel allocation for each feature.
+ */
+Feature features[featureCount];
 
-// Some things for messaging
-byte CHANNEL_MASK = 0b10000000;
-byte channel_indicator = 10;
+/*
+ * Definitions for identifying packet types.
+ */
+const byte CHANNEL_MASK = 0b10000000;
+const byte channel_indicator = 10;
+
+/*
+ * The time used to tween from one frame to the next.
+ */
+unsigned long time_per_frame = 1000;
+unsigned long last_frame_start = 0;
+
+/*
+ * For streaming frames, a queue.
+ */
+// One frame:
+typedef struct frame { unsigned char positions[featureCount]; };
+
+// All frames:
+unsigned int frameQueueSize = 100; // todo tune this to maximum
+ArduinoQueue<frame> frameQueue(frameQueueSize);
+frame next_frame;
+
+/*
+ * For saving frames and playing them back, an array.
+ */
+frame savedFrames[100];
+
+
+/*** Memory test ***/
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else  // __ARM__
+extern char *__brkval;
+#endif  // __arm__
+
+int freeMemory() {
+  char top;
+#ifdef __arm__
+  return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+  return &top - __brkval;
+#else  // __arm__
+  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}
+/*** End of memory test ***/
+
+bool playing = false;
 
 void setup() {
   Serial.begin(115200);
   Serial.println("8 channel Servo test!");
-
-  mouthTween = TweenDuino::Tween::to(mouthPos, 5000UL, MOUTH_OPEN);
 
   pwm.begin();
   // In theory the internal oscillator is 25MHz but it really isn't
@@ -63,31 +115,21 @@ void setup() {
   // you get the frequency you're expecting!
   pwm.setOscillatorFrequency(27000000);  // The int.osc. is closer to 27MHz  
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
-}
 
-// You can use this function if you'd like to set the pulse length in seconds
-// e.g. setServoPulse(0, 0.001) is a ~1 millisecond pulse width. It's not precise!
-void setServoPulse(uint8_t n, double pulse) {
-  double pulselength;
-  
-  pulselength = 1000000;   // 1,000,000 us per second
-  pulselength /= SERVO_FREQ;   // Analog servos run at ~60 Hz updates
-  Serial.print(pulselength); Serial.println(" us per period"); 
-  pulselength /= 4096;  // 12 bits of resolution
-  Serial.print(pulselength); Serial.println(" us per bit"); 
-  pulse *= 1000000;  // convert input seconds to us
-  pulse /= pulselength;
-  Serial.println(pulse);
-  pwm.setPWM(n, 0, pulse);
-
-  
+  //features = malloc(featureCount * sizeof(Feature));
+  for(int i = 0; i < featureCount; i++) {
+    features[i].setAll(
+      &pwm,
+      i,
+      featureMap[i][0],
+      featureMap[i][1]
+    );
+    features[i].setPos(0x7f);
+    features[i].setTarget(0, time_per_frame);
+  }
 }
 
 void loop() {
-  mouthTween->update(millis());
-  pwm.setPWM(MOUTH, 0, (int)mouthPos);
-  
-  /*
   if(Serial.available() > 0) {
     int count = Serial.readBytes(buffer,buffer_length);
     byte channel = -1;
@@ -96,9 +138,24 @@ void loop() {
     log(count);
     log(" bytes\n");
     for(int i=0; i < count; i++) {
+      if((unsigned char)buffer[i] == FRAME_STOP_INDICATOR) {
+        /* Add the existing next_frame to the queue,
+        *  set an empty next_frame.
+        */
+        log("EOF");
+        frameQueue.enqueue(next_frame);
+        next_frame = frame();
+      } else if ((unsigned char)buffer[i] == PLAY) {
+        log("PLAY");
+        playing = true;
+        last_frame_start = millis();
+      } else if ((unsigned char)buffer[i] == STOP) {
+        log("STOP");
+        playing = false;
+      }
       // Channel indicators start with 0
       // Value indicators start with 1
-      if((buffer[i] & CHANNEL_MASK) == 0) {
+      else if((buffer[i] & CHANNEL_MASK) == 0) {
         // This indicates a channel. Mask out the flag bit to find which.
         channel = (buffer[i] & ~CHANNEL_MASK);
         log("C = ");
@@ -113,59 +170,43 @@ void loop() {
       }
 
       if(value > -1 && value <= 0x7f && channel > -1) {
+        /*
+         * Enqueue this instruction
+         */
         log("Setting channel ");
         //log(channel);
         log(" to " );
         //log(value);
         log("\n");
-        int pos = map(
-            value,
-            0,
-            0x7f,
-            featureMap[channel][0],
-            featureMap[channel][1]
-          );
-        pwm.setPWM(channel, 0, pos);
-        );
+        next_frame.positions[channel] = value;
       }
     }
   }
-  */
-}
 
-void blink() {
-  pwm.setPWM(LEFT_EYE_UPPER_LID, 0, LEFT_EYE_UPPER_LID_CLOSED);
-  pwm.setPWM(LEFT_EYE_LOWER_LID, 0, LEFT_EYE_LOWER_LID_CLOSED);
-  pwm.setPWM(RIGHT_EYE_UPPER_LID, 0, RIGHT_EYE_UPPER_LID_CLOSED);
-  pwm.setPWM(RIGHT_EYE_LOWER_LID, 0, RIGHT_EYE_LOWER_LID_CLOSED);
-  delay(100);
-  pwm.setPWM(LEFT_EYE_UPPER_LID, 0, LEFT_EYE_UPPER_LID_OPEN);
-  pwm.setPWM(LEFT_EYE_LOWER_LID, 0, LEFT_EYE_LOWER_LID_OPEN);
-  pwm.setPWM(RIGHT_EYE_UPPER_LID, 0, RIGHT_EYE_UPPER_LID_OPEN);
-  pwm.setPWM(RIGHT_EYE_LOWER_LID, 0, RIGHT_EYE_LOWER_LID_OPEN);
-}
-
-void talk() {
-  // Do it a few times because this is short and dulllll
-  for(int j=0; j<5; j++) {
-    for(int i=0; i<5; i++) {
-      pwm.setPWM(
-        MOUTH,
-        0,
-        map(
-          talk_map[i][0], // value
-          0,              // in min
-          100,            // in max
-          MOUTH_CLOSED,   // out min
-          MOUTH_OPEN      // out max
-        )
-      );
-      delay(talk_map[i][1]);
+  /*
+   * Play frames, if in the playing state and frames
+   * are available to play.
+   */
+  if(playing) {
+    // If there are frames available and we're due for a new one...
+    if(last_frame_start + time_per_frame <= millis()) {
+      if(frameQueue.item_count() > 0) {
+        // Get the next frame, set all features to its target positions.
+        frame f = frameQueue.dequeue();
+        for(int i = 0; i < featureCount; i++) {
+          features[i].setTarget(f.positions[i],time_per_frame);
+        }
+        last_frame_start = millis();
+      } else {
+        playing = false;
+      }
+    }
+    for(int i = 0; i < featureCount; i++) {
+      features[i].updatePWM();
     }
   }
-  // Close that mouth when done talking - don't do this automatically!
-  pwm.setPWM(MOUTH, 0, MOUTH_CLOSED);
 }
+
 
 inline void log(String s) {
   #ifdef DEBUG
