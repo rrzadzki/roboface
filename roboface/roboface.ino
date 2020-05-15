@@ -82,27 +82,6 @@ frame next_frame;
  */
 frame savedFrames[100];
 
-
-/*** Memory test ***/
-#ifdef __arm__
-// should use uinstd.h to define sbrk but Due causes a conflict
-extern "C" char* sbrk(int incr);
-#else  // __ARM__
-extern char *__brkval;
-#endif  // __arm__
-
-int freeMemory() {
-  char top;
-#ifdef __arm__
-  return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-  return &top - __brkval;
-#else  // __arm__
-  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-#endif  // __arm__
-}
-/*** End of memory test ***/
-
 bool playing = false;
 
 void setup() {
@@ -138,47 +117,95 @@ void loop() {
     log(count);
     log(" bytes\n");
     for(int i=0; i < count; i++) {
-      if((unsigned char)buffer[i] == FRAME_STOP_INDICATOR) {
-        /* Add the existing next_frame to the queue,
-        *  set an empty next_frame.
-        */
-        log("EOF");
-        frameQueue.enqueue(next_frame);
-        next_frame = frame();
-      } else if ((unsigned char)buffer[i] == PLAY) {
-        log("PLAY");
-        playing = true;
-        last_frame_start = millis();
-      } else if ((unsigned char)buffer[i] == STOP) {
-        log("STOP");
-        playing = false;
-      }
-      // Channel indicators start with 0
-      // Value indicators start with 1
-      else if((buffer[i] & CHANNEL_MASK) == 0) {
-        // This indicates a channel. Mask out the flag bit to find which.
-        channel = (buffer[i] & ~CHANNEL_MASK);
-        log("C = ");
-        //log(channel,BIN);
-        log("\n");
-      } else {
-        // This is a value set. Mask out the flag to get the value.
-        value = (buffer[i] & ~CHANNEL_MASK);
-        log("V = ");
-        //log(value);
-        log("\n");
-      }
+      if(MODE == STREAMING) {
+        if((unsigned char)buffer[i] == FRAME_STOP_INDICATOR) {
+          /* Add the existing next_frame to the queue,
+          *  set an empty next_frame.
+          */
+          log("EOF");
+          frameQueue.enqueue(next_frame);
+          next_frame = frame();
+        } else if ((unsigned char)buffer[i] == PLAY) {
+          log("PLAY");
+          playing = true;
+          last_frame_start = millis();
+        } else if ((unsigned char)buffer[i] == STOP) {
+          log("STOP");
+          playing = false;
+        }
+        // Channel indicators start with 0
+        // Value indicators start with 1
+        else if((buffer[i] & CHANNEL_MASK) == 0) {
+          // This indicates a channel. Mask out the flag bit to find which.
+          channel = (buffer[i] & ~CHANNEL_MASK);
+          log("C = ");
+          //log(channel,BIN);
+          log("\n");
+        } else {
+          // This is a value set. Mask out the flag to get the value.
+          value = (buffer[i] & ~CHANNEL_MASK);
+          log("V = ");
+          //log(value);
+          log("\n");
+        }
+  
+        if(value > -1 && value <= 0x7f && channel > -1) {
+          /*
+           * Enqueue this instruction
+           */
+          log("Setting channel ");
+          //log(channel);
+          log(" to " );
+          //log(value);
+          log("\n");
+          next_frame.positions[channel] = value;
+        }
+      } else if (MODE == PLAYBACK_DL) { // during playback DL, store things
 
-      if(value > -1 && value <= 0x7f && channel > -1) {
-        /*
-         * Enqueue this instruction
-         */
-        log("Setting channel ");
-        //log(channel);
-        log(" to " );
-        //log(value);
-        log("\n");
-        next_frame.positions[channel] = value;
+        if((buffer[i] == STOP_DL) {
+          MODE == PLAYBACK;
+        }
+        else if((unsigned char)buffer[i] == FRAME_STOP_INDICATOR) {
+          /* Add the existing next_frame to the queue,
+          *  set an empty next_frame.
+          */
+          log("EOF");
+          savedFrames[nextFrameIdx] = next_frame;
+          next_frame = frame();
+        }
+        // Channel indicators start with 0
+        // Value indicators start with 1
+        else if((buffer[i] & CHANNEL_MASK) == 0) {
+          // This indicates a channel. Mask out the flag bit to find which.
+          channel = (buffer[i] & ~CHANNEL_MASK);
+          log("C = ");
+          //log(channel,BIN);
+          log("\n");
+        } else {
+          // This is a value set. Mask out the flag to get the value.
+          value = (buffer[i] & ~CHANNEL_MASK);
+          log("V = ");
+          //log(value);
+          log("\n");
+        }
+  
+        if(value > -1 && value <= 0x7f && channel > -1) {
+          /*
+           * Enqueue this instruction
+           */
+          log("Setting channel ");
+          //log(channel);
+          log(" to " );
+          //log(value);
+          log("\n");
+          next_frame.positions[channel] = value;
+        }
+      } else if (MODE == PLAYBACK) {
+        if(buffer[i] == PLAY) {
+          playing = true;
+        } else if (buffer[i] == STOP) {
+          playing = false;
+        }
       }
     }
   }
