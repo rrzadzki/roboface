@@ -1,5 +1,6 @@
 /*************************************************** 
   Based on Adafruit's demo of the PWM servo board,
+  (https://learn.adafruit.com/16-channel-pwm-servo-driver/using-the-adafruit-library)
   this is the setup sketch for playing around with
   ol' roboface (HELPeR?). It's handy for trying out
   basic stuff but not ideal for any presentation with
@@ -113,7 +114,7 @@ void blink() {
 }
 
 void talk() {
-  // Do it a few times because this is short and dulllll
+  // Waggle the jaw a few times
   for(int j=0; j<5; j++) {
     for(int i=0; i<5; i++) {
       pwm.setPWM(
@@ -130,6 +131,6 @@ void talk() {
       delay(talk_map[i][1]);
     }
   }
-  // Close that mouth when done talking - don't do this automatically!
+  // Close that mouth when done talking, it's polite.
   pwm.setPWM(MOUTH, 0, MOUTH_CLOSED);
 }
