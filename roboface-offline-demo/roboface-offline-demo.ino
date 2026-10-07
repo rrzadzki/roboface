@@ -36,7 +36,7 @@ uint8_t servonum = 0;
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("8 channel Servo test!");
+  Serial.println("16 channel Servo test!");
 
   pwm.begin();
   // In theory the internal oscillator is 25MHz but it really isn't

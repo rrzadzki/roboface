@@ -14,7 +14,6 @@ public:
   Feature(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum);
   ~Feature();
   void setAll(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum);
-  void setPos(int pos);
   void setTarget(int to, long ms);
   void updatePWM();
 

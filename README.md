@@ -10,7 +10,7 @@ ways to control the same face:
 | | |
 |---|---|
 | **[`roboface-offline-demo/`](roboface-offline-demo/README.md)** | A simple remote control. You type numbers in a serial monitor and the face moves. **Start here.** It builds today. |
-| **[`roboface-streaming/`](roboface-streaming/README.md)** | The real thing. A computer sends timed frames over serial and the face glides between them. It is a work in progress and does not compile yet. |
+| **[`roboface-streaming/`](roboface-streaming/README.md)** | The real thing. A computer sends timed frames over serial and the face glides between them. |
 
 If you have never used a programmable board before, do the offline demo first. It
 will teach you almost everything you need. Then, when it is working, come back
@@ -219,21 +219,21 @@ is called three different things in this project.
 | Where | Units | Mouth closed is | Mouth open is | Who decides |
 |---|---|---|---|---|
 | Offline demo firmware | raw pulse counts | 200 | 450 | `features.h` |
-| Streaming firmware | 0 to 0x7f (0 to 127) | 0x00 | 0x7f | `features.h` + `Feature.cpp` |
+| Streaming firmware | 0 to 0xff (0 to 255) | 0x00 | 0xff | `features.h` + `Feature.cpp` |
 | Python scripts | 0 to 100 (a percentage) | 0 | 100 | the `.py` file |
 
-So "the mouth three quarters open" is `337` to the offline demo, `0x5f` to the
+So "the mouth three quarters open" is `337` to the offline demo, `0xbf` to the
 streaming firmware, and `75` to `driver.py`. Three numbers, one position.
 
 The streaming firmware is where the translation happens. A `Feature` object
 knows its own minimum and maximum and does this:
 
 ```
-Feature::mapMe()   maps 0x00 - 0x7f onto this feature's own range
+Feature::mapMe()   maps 0x00 - 0xff onto this feature's own range
 ```
 
 A useful thing about the way `featureMap` is written: **every row is
-`{ CLOSED, OPEN }`**, in that order, for all five features. So sending `0x7f`
+`{ CLOSED, OPEN }`**, in that order, for all five features. So sending `0xff`
 always means "as open as this feature can go" and `0x00` always means "as closed
 as it can go", even for the three features whose numbers run backwards. The
 firmware handles the inversion. That is a real design decision, and it is why the
@@ -361,12 +361,10 @@ early will save you from trying to make a servo do a job it cannot hold.
 
 ## For whoever maintains this
 
-- Developer and agent notes, including the exact line numbers of the unfinished
-  work, live in [`AGENTS.md`](AGENTS.md). The module READMEs repeat the parts a
-  beginner needs.
-- The two directories share no code at all. They share nothing but the shape of
-  the problem, and `actions.h` and `positions.h` are byte-identical copies.
-- The streaming half does not compile as committed. It is documented as a work in
-  progress rather than quietly fixed, and
-  [`roboface-streaming/README.md`](roboface-streaming/README.md#it-does-not-compile-yet-read-this-first)
-  has the checklist of what is missing.
+- Developer and agent notes live in [`AGENTS.md`](AGENTS.md). The module READMEs
+  repeat the parts a beginner needs.
+- The two sketches share no code at all. They share nothing but the shape of the
+  problem, and `actions.h` and `positions.h` are byte-identical copies (the
+  streaming sketch no longer includes them).
+- `roboface-streaming/README.md` documents the wire protocol and the remaining
+  design notes.

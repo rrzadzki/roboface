@@ -13,37 +13,31 @@ manifest**. Two independent Arduino sketches live side by side; they share no co
   1-16 selects a channel, 101/102 are EYES_CLOSED/EYES_OPEN, 1001/1002 are
   BLINK/TALK, and 150-600 is a raw PWM count. Derived from Adafruit's servo
   demo; `setServoPulse()` and `SERVOMIN/MAX` are unused leftovers.
-- `roboface-streaming/roboface.ino` — the live driver. Serial at **115200 baud**,
-  commands accumulate into `next_frame`, get enqueued as a `frame` on the
-  end-of-frame byte, and are dequeued and tweened into place every
-  `time_per_frame` ms (default 1000) while `playing` is true.
+- `roboface-streaming/roboface-streaming.ino` — the live driver. Serial at
+  **115200 baud**. Length-prefixed frames are enqueued (streaming) or saved
+  (download mode), then dequeued and tweened into place every `time_per_frame`
+  ms (default 1000) while `playing` is true.
+- `roboface-streaming/serial_protocol.py` — shared wire helpers (control bytes,
+  frame encoding, port selection) used by the host senders.
 - `roboface-streaming/{driver,playback,live_audio,send_serial}.py` — host-side
-  senders, not a library.
+  senders.
 
 ## Build / flash
 
 Open the `.ino` in the Arduino IDE and upload with the board you have wired up.
-The board/FQBN is **not recorded anywhere in this repo** — ask before assuming.
-These libraries must be installed via Library Manager; none are vendored:
-`Adafruit_PWMServoDriver`, `TweenDuino` (pulls in `Tween`/`Timeline`),
+The target is an **Arduino Uno** (`arduino:avr:uno`). These libraries must be
+installed via Library Manager; none are vendored: `Adafruit_PWMServoDriver`,
+`TweenDuino` (brings its own `Tween`/`Timeline`, and depends on `Easing`),
 `ArduinoQueue`. Oscillator frequency is set to 27000000 to match the real
 internal oscillator, not the nominal 25 MHz.
 
-## roboface-streaming does not compile as committed
+## roboface-streaming modes
 
-Last commit is "WIP on more distinct playback modes"; the refactor was left
-half-finished. Expect to fix these before you can upload or judge a change:
-
-- `MODE` is used at roboface.ino:120/163/203 but never defined, nor are
-  `STREAMING`, `PLAYBACK`, `PLAYBACK_DL`, `STOP_DL`, or `nextFrameIdx`.
-- roboface.ino:165 has unbalanced parens: `if((buffer[i] == STOP_DL) {`.
-- roboface.ino:166 assigns with `==` instead of `=` (a MODE transition).
-- The `PLAYBACK`/`PLAYBACK_DL` branches are mutually exclusive `else if`s on a
-  constant-ish `MODE`, and the download path writes `savedFrames[nextFrameIdx]`
-  with no bound on `nextFrameIdx` against `savedFrames[100]`.
-
-**The offline demo is the only sketch that builds.** Use it to sanity-check
-hardware and calibration changes.
+`MODE` is an enum: `STREAMING` (default), `PLAYBACK_DL`, `PLAYBACK`. Wire
+control bytes switch between them: `START_DL` (`0xfb`) enters download,
+`STOP_DL` (`0xfc`) ends download and enters playback, `PLAY` (`0xfe`)/`STOP`
+(`0xfd`) start and stop motion. `savedFrames` holds `SAVED_FRAME_COUNT` (100)
+entries and `nextFrameIdx` is bounds-checked before each write.
 
 ## Channel numbers are the wire format
 
@@ -57,7 +51,7 @@ feature silently re-points a servo.
 
 - **Offline demo** takes and writes *raw PWM counts* straight to
   `pwm.setPWM(channel, 0, count)` (mouth 200-450, lids 190-330).
-- **Streaming** takes a normalized 0x00-0x7f value; `Feature::mapMe()` maps it
+- **Streaming** takes a normalized 0x00-0xff value; `Feature::mapMe()` maps it
   onto that feature's own `featureMap` min/max. Host scripts speak a third
   unit, 0-100 percent, and convert themselves.
 
@@ -66,45 +60,47 @@ send, and vice versa.
 
 ## Serial protocol (streaming, 115200 8N1)
 
-One byte, high bit selects the meaning — the high bit is stripped off the
-payload:
+Length-prefixed frames. A frame is a `0xff` marker, a one-byte pair count `N`,
+then `N` `(channel, value)` pairs. Values are full 0-255 bytes.
 
 | Byte | Meaning |
 | --- | --- |
-| `0x00`-`0x7f` | channel index |
-| `0x80`-`0xff` | value for the most recent channel |
-| `0xff` | end of frame; enqueue the accumulated frame |
+| `0xff` | frame start; the next byte is the pair count |
+| `N` | number of `(channel, value)` pairs that follow |
+| `channel` | feature index (0-4), validated against `featureCount` |
+| `value` | 0-255, mapped onto the feature's own min/max |
 | `0xfe` | PLAY |
 | `0xfd` | STOP |
+| `0xfb` | START_DL (enter download mode) |
+| `0xfc` | STOP_DL (end download, enter playback) |
 
-Collision to be aware of: the three control bytes are indistinguishable from
-value bytes, so values `0x7d`-`0x7f` (percent 98-100) can never be
-transmitted. `driver.py` maps percent onto `0x00`-`0x7e`, which puts percent
-100 exactly on the `PLAY` byte. Framing is also fragile because the firmware
-reads a fixed `buffer_length` of 2 bytes per `readBytes` with no resync, so a
-short read desynchronizes channel/value pairing.
+Because the count tells the parser exactly how many payload bytes to read,
+payload bytes are never mistaken for control bytes (every value is
+representable), and a stray `0xff` gives a natural resync point (`N >
+featureCount` is treated as desync). The firmware reads one byte at a time with
+a small state machine.
 
 ## Host scripts
 
-All four open `COM4` at 115200 **at import time**, with no
-`if __name__ == '__main__'` guard — `driver.py` drops into a prompt loop the
-moment it is imported. Only one can hold the port. `COM4` is hardcoded in each
-file; there is no env var or CLI flag. `live_audio.py` additionally needs
-`pyaudio` and `numpy`, and drives the mouth from mic amplitude.
+All four are guarded with `if __name__ == '__main__'` and share
+`serial_protocol.py` for wire encoding and port selection. The port defaults to
+`COM4` and can be overridden with the `ROBOFACE_PORT` env var. Only one script
+can hold the port at a time. `live_audio.py` additionally needs `pyaudio` and
+`numpy`, and drives the mouth from mic amplitude.
 
 ## Duplicated headers
 
 `actions.h` and `positions.h` are byte-identical between the two directories;
 `features.h` differs (streaming adds `featureCount` and `featureMap`). A
 calibration fix must be applied in both directories — there is no shared
-include path. `BORED` in `roboface-streaming/positions.h` is unused.
+include path. The streaming sketch no longer includes `positions.h` or
+`actions.h`; they remain only because they are shared with the offline demo.
 
 ## Known behavioral gaps
 
-- `Feature::updatePWM()` writes `Feature::pos`, but the tween's current value is
-  never read back into it, so `setTarget()` currently has no visible effect.
-  `setAll()` also double-maps its minimum (`pos = mapMe(minPos)`).
 - `ArduinoQueue<frame> frameQueue(100)` silently drops frames when the host
   streams faster than one frame per `time_per_frame`.
-- Playback auto-stops when the queue drains, so a still-running host must send
-  `PLAY` again to resume.
+- Playback auto-stops when its source drains (queue or `savedFrames`), so a
+  still-running host must send `PLAY` again to resume.
+- Channels a frame omits stay at 0 (fully closed), because `next_frame` is
+  zero-initialized when a frame completes.

@@ -1,45 +1,35 @@
-import pyaudio
-import numpy
-import audioop
-import serial
 from time import sleep
+
+import numpy
+import pyaudio
+
+import serial_protocol as proto
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
-RECORD_SECONDS = 5
 CHUNK = 1024
-
 MAX_AMP = 2600
 
-ser = serial.Serial(
-  'COM4',
-  115200,
-  serial.EIGHTBITS,
-  serial.PARITY_NONE,
-  serial.STOPBITS_ONE,
-  timeout=0.5
-)
-sleep(5)
 
-#mic = soundcard.default_microphone()
-p = pyaudio.PyAudio()
-stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+def main():
+    ser = proto.connect()
+    sleep(1)
 
-maximum = 0
-samples = []
+    p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
-while True:
-	# record 1/10 of a second
-	data = stream.read(1024)
-	amp = audioop.max(data,2)
-	if amp > maximum:
-		maximum = amp
-		print("New max: {}".format(maximum))
-	amp = amp / MAX_AMP
-	amp = numpy.min([amp,1])
-	b = int(amp * 0x7f) | 0x80
-	#print("Sending byte {} for raw {}".format(b,amp))
-	sleep(.01)
-	ser.write([0x00, b])
-	
+    ser.write(bytes([proto.PLAY]))
+
+    while True:
+        data = stream.read(CHUNK)
+        arr = numpy.frombuffer(data, dtype=numpy.int16)
+        amp = int(numpy.max(numpy.abs(arr)))
+        amp = min(amp / MAX_AMP, 1.0)
+        value = int(amp * proto.VALUE_MAX)
+        ser.write(proto.encode_frame([(0, value)]))
+        sleep(0.1)
+
+
+if __name__ == '__main__':
+    main()

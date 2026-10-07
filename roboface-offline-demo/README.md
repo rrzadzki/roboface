@@ -6,10 +6,9 @@ It does one job: you type a number into the Arduino's serial monitor and a servo
 moves to that position. No computer, no Python, no timing. You are the animation
 system.
 
-It is also the calibration tool, and the only program in this repository that
-builds today. The other one,
-[`roboface-streaming/`](../roboface-streaming/README.md), is a work in progress
-that does not compile.
+It is also the calibration tool. The other program,
+[`roboface-streaming/`](../roboface-streaming/README.md), is the live driver
+that glides between frames sent from a computer.
 
 Read [`../README.md`](../README.md) first for the hardware, the wiring, and what
 a servo actually is. This page assumes you have that.

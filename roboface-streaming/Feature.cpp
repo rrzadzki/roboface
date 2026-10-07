@@ -1,60 +1,58 @@
-#import "Feature.h"
+#include "Feature.h"
 
 Feature::Feature() {
+  channel = 0;
+  minPos = 0;
+  maxPos = 0;
+  pos = 0;
+  tween = nullptr;
+  pwm = nullptr;
 }
 
-Feature::Feature(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum) {
-  channel = chan;
-  minPos = minimum;
-  maxPos = maximum;
-  pos = minPos;
-  tween = TweenDuino::Tween::to(pos, 1000, maxPos);
-  pwm = pwmD;
+Feature::Feature(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum)
+  : channel(0), minPos(0), maxPos(0), pos(0), tween(nullptr), pwm(nullptr) {
+  setAll(pwmD, chan, minimum, maximum);
 }
 
 Feature::~Feature() {
-  // TODO
+  if (tween) {
+    delete tween;
+  }
 }
-
 
 void Feature::setAll(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum) {
   channel = chan;
   minPos = minimum;
   maxPos = maximum;
-  pos = mapMe(minPos);
-  tween = TweenDuino::Tween::to(pos, 1000, maxPos);
+  pos = minimum;
+  if (tween) {
+    delete tween;
+    tween = nullptr;
+  }
   pwm = pwmD;
 }
 
-void Feature::setPos(int p) {
-  if(p >= minPos && p <= maxPos) {
-    pos = mapMe(p);
-    pwm->setPWM(channel,0,pos);
-  }
-}
-
 void Feature::setTarget(int to, long ms) {
-  free(tween);
-  // "to" is a value 0 through 0x7f; map it
-  // onto the range of this feature.
-  
-  tween = TweenDuino::Tween::to(
-    pos,
-    ms,
-    mapMe(to)
-  );
+  // "to" is a value 0 through 255; map it onto this feature's range.
+  if (tween) {
+    delete tween;
+  }
+  tween = TweenDuino::Tween::to(pos, ms, mapMe(to));
 }
 
 void Feature::updatePWM() {
+  if (!tween) {
+    return;
+  }
   tween->update(millis());
-  pwm->setPWM(channel, 0, pos);
+  pwm->setPWM(channel, 0, (int)pos);
 }
 
 int Feature::mapMe(int to) {
   return map(
       to,
       0,
-      0x7f,
+      255,
       minPos,
       maxPos
     );
