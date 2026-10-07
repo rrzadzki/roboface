@@ -19,7 +19,7 @@ a servo actually is. This page assumes you have that.
 
 | File | What it is |
 |---|---|
-| `roboface-setup.ino` | The whole program. |
+| `roboface-offline-demo.ino` | The whole program. |
 | `features.h` | Which channel each feature is on, and its open/closed positions. **The important file.** |
 | `positions.h` | Two preset commands: `EYES_CLOSED` and `EYES_OPEN`. |
 | `actions.h` | The `talk` and `blink` commands, and the mouth movement table behind `talk`. |
@@ -40,8 +40,8 @@ straight to step 4.
 Manage Libraries...*, search for `Adafruit PWM Servo Driver Library`, and click
 Install. It is the only library this sketch needs.
 
-**2. Open the sketch.** *File → Open*, then pick `roboface-setup.ino`. The IDE
-opens the folder containing it, which is what you want.
+**2. Open the sketch.** *File → Open*, then pick `roboface-offline-demo.ino`.
+The IDE opens the folder containing it, which is what you want.
 
 **3. Pick the board.** *Tools → Board → Arduino Uno*. Then check
 *Tools → Port* and pick the one your Uno is on. Getting the board right matters:
@@ -70,11 +70,11 @@ if you get them wrong:
 The monitor should print this when you open it:
 
 ```
-8 channel Servo test!
+16 channel Servo test!
 ```
 
-That is a leftover message from Adafruit's original demo. It is inaccurate, the
-board has 16 channels, and nothing is wrong.
+The board has 16 channels, so that is correct. If you see nothing at all, check
+the two settings above before you suspect the hardware.
 
 ---
 
@@ -102,7 +102,7 @@ Set position of motor 0 to 200
 Set position of motor 0 to 450
 > 4          selects channel 3, the right upper eyelid
 Set selected motor channel to 3
-> 280        eyelids shut
+> 280        right upper lid closed
 Set position of motor 3 to 280
 > 1001       blink
 ```
@@ -116,7 +116,8 @@ so you type `2` to select it.
 If you type something outside every range above, the sketch stays silent. It is
 not broken, you just typed a number it has no meaning for. The dead zones are:
 
-`0`, `17` to `100`, `103` to `149`, `601` to `1000`, and anything `1003` or above.
+`0`, any negative number, `17` to `100`, `103` to `149`, `601` to `1000`, and
+anything `1003` or above.
 
 ---
 
@@ -134,20 +135,30 @@ The safe method, for the left lower eyelid as an example:
 1. **Take the horn off if you can.** Or better, disconnect the servo from its
    horn link, so nothing is under load. It is much easier to find the limits with
    nothing pushing back.
-2. Put the servo in the middle of the known range first. For this eyelid that is
-   `280`, the "closed" number already in the file.
+2. Start at `280`, the "closed" number already in the file for this eyelid. It
+   is a value known to be safe for this servo, and both searches below begin
+   there.
 3. Nudge the number up by 5 or 10 at a time. `290`, `300`, `310`.
 4. **Stop at the first sign of resistance.** A little tension is normal. Grinding,
    buzzing, or a servo that is warm is not. The moment the servo stops following
-   smoothly, back off by 10 and call that your number.
-5. Now do the same in the other direction, down to about `190`, and write that
-   number into the `..._OPEN` entry.
+   smoothly, back off by 10. That is one limit of travel — for this eyelid it
+   comes out near `330`, which is `LEFT_EYE_LOWER_LID_OPEN`, the *higher* number.
+5. Go back to `280` and search the other direction the same way: `270`, `260`,
+   `250`, and so on. If the servo resists almost immediately, the file's closed
+   value is already at the limit and you keep it. If it moves freely, stop at the
+   first sign of resistance, back off by 10, and that is the other limit — for
+   this eyelid, `LEFT_EYE_LOWER_LID_CLOSED`.
+
+   Which limit is "open" and which is "closed" depends on the feature, not on
+   the direction you searched. Higher number means more open for the mouth, the
+   left lower lid, and the right upper lid. Lower number means more open for the
+   left upper lid and the right lower lid.
 6. Reconnect the linkage. If the range you found is now correct but the lid moves
    the wrong way as you increase the number, that is normal for a horn that is
    clipped on backwards. Either swap the two numbers in the file, or flip the
    horn. Both work; flipping the horn is usually kinder to the linkage.
 
-Then do the other four. Mouth, left upper, left lower, right upper, right lower.
+Then do the other four: mouth, left upper, right upper, right lower.
 
 ### Write it down in two places
 
@@ -156,8 +167,9 @@ Then do the other four. Mouth, left upper, left lower, right upper, right lower.
 A calibration fix in one and not the other means the two programs will disagree
 about what 280 means, and you will find that out weeks from now.
 
-`actions.h` and `positions.h` are byte-identical copies for the same reason. Keep
-it that way, or note the difference.
+`actions.h` is a byte-identical copy for the same reason, and `positions.h` is
+nearly one — the streaming copy carries one extra, unused `#define BORED 103`.
+Keep them in sync, or note the difference if you deliberately diverge.
 
 ### What the numbers in the file mean
 
@@ -168,15 +180,16 @@ it that way, or note the difference.
 | `LEFT_EYE_UPPER_LID_OPEN 240` | 240 | about 1.17 ms |
 | `LEFT_EYE_LOWER_LID_OPEN 330` | 330 | about 1.61 ms |
 | `RIGHT_EYE_UPPER_LID_OPEN 320` | 320 | about 1.56 ms |
-| `RIGHT_EYE_LOWER_LID_CLOSED 280` | 280 | about 1.37 ms |
+| `RIGHT_EYE_LOWER_LID_CLOSED 250` | 250 | about 1.22 ms |
 | `RIGHT_EYE_LOWER_LID_OPEN 190` | 190 | about 0.93 ms |
 
 Full table in [`../README.md#what-the-numbers-mean`](../README.md#what-the-numbers-mean).
 
-You will notice that the upper lids are **backwards**: "open" is the lower number.
-The horn on those servos is flipped, so the lid sweeps the other way as the count
-goes up. The file describes what the hardware does, and that is the correct
-behavior for it to have.
+You will notice that two of the five run **backwards**: the left upper lid
+(`OPEN 240`, `CLOSED 280`) and the right lower lid (`OPEN 190`, `CLOSED 250`).
+For those two, "open" is the lower number. The horn on those servos is clipped on
+rotated, so the lid sweeps the other way as the count goes up. The file describes
+what the hardware does, and that is the correct behavior for it to have.
 
 ---
 
@@ -197,10 +210,13 @@ and it hands back the integer 450. It waits for a newline, which is why the line
 ending setting matters.
 
 **A chain of `if` / `else if` decides what the number meant.** Read the chain in
-`roboface-setup.ino` from the top. It tests, in order: is this a channel number?
-is this a preset? is this a raw position? is this an action? Whichever test is
-true first wins, and the rest are skipped. That is why `101` is a preset and not
-a position, and why there is a gap between `102` and `150`.
+`roboface-offline-demo.ino` from the top. It tests, in order: is this a channel
+number? is this a preset? is this a raw position? is this an action? The four
+ranges it accepts — `1` to `16`, `101` to `149`, `150` to `600`, and `1001` to
+`1099` — never overlap, so every number you type lands in at most one of them.
+That is why `101` is a preset and not a position, and why the gap between `102`
+and `150` is dead: the preset branch accepts those numbers but no preset is
+defined for them.
 
 Two helpers worth reading, because they are most of the interesting code:
 
@@ -242,12 +258,10 @@ Honest list of things that are odd, so you do not lose an hour to them.
   range the raw-position command accepts, which is why typing `100` or `900` does
   nothing.
 - **`bool move = true;` is unused.** Dead variable.
-- **The startup banner says "8 channel Servo test!".** Wrong on both counts.
-  Ignore it.
 - **`blink()` and `talk()` block.** `delay()` freezes the entire program, so
   during a 2.5 second `talk()` the Serial Monitor will not respond and you cannot
-  interrupt it. That is a limitation of this simple version and the main reason
-  the streaming half exists.
+  interrupt it. That is a limitation of this sketch and one reason the streaming
+  half exists.
 - **The eye presets ignore the mouth.** `101` and `102` move the four lids only.
 - **The sketch stores nothing.** There is no memory of the positions you set. The
   servos themselves will sit wherever you left them, because that is how a servo
@@ -260,12 +274,19 @@ Honest list of things that are odd, so you do not lose an hour to them.
 In rough order of how much they teach you.
 
 1. **Retune `talk_map`.** Make the mouth chatter faster, or make `talk()` last
-   twice as long by adding another loop. This is a five-number edit.
+   twice as long by raising the outer loop's count from 5 to 10. The table itself
+   is a five-number edit; `talk_map` lives in `actions.h`, which is duplicated in
+   [`../roboface-streaming/`](../roboface-streaming/README.md) — change both
+   copies, or note the difference.
 2. **Add a preset.** Suppose you want a "perked" look, eyes open and jaw slightly
-   open. Add `#define PERKED 103` to `positions.h` in both directories, then add
-   an `else if` branch in the preset section of `loop()` that moves all four lids
-   and the mouth. Remember the 1-based channel thing: `MOUTH` is `0`, so you
-   address it as `pwm.setPWM(0, 0, ...)`.
+   open. Add `#define PERKED 103` to `positions.h` in both directories (the
+   streaming copy already claims `103` for an unused `BORED`; two names for one
+   number compile fine, but `104` is free if you would rather keep them apart),
+   then add an `else if` branch in the preset section of `loop()` that moves all
+   four lids and the mouth. Address features the way the existing presets do,
+   with their names: `pwm.setPWM(MOUTH, 0, ...)`. The 1-based trap only applies
+   to numbers you type — channel 0 is the mouth both in the file and in
+   `setPWM()`.
 3. **Add an action.** `WAVE` on a channel nobody uses yet, or an `EARPLUGS`
    command that closes the eyes and then twitches the mouth a few times. Add the
    number to `actions.h` in both directories, then a branch in the action

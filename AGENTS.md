@@ -8,7 +8,7 @@ manifest**. Two independent Arduino sketches live side by side; they share no co
 
 ## Layout
 
-- `roboface-offline-demo/roboface-setup.ino` — range-of-motion / calibration
+- `roboface-offline-demo/roboface-offline-demo.ino` — range-of-motion / calibration
   sketch. Interactive over serial at **9600 baud**: `Serial.parseInt()` where
   1-16 selects a channel, 101/102 are EYES_CLOSED/EYES_OPEN, 1001/1002 are
   BLINK/TALK, and 150-600 is a raw PWM count. Derived from Adafruit's servo
@@ -90,11 +90,12 @@ can hold the port at a time. `live_audio.py` additionally needs `pyaudio` and
 
 ## Duplicated headers
 
-`actions.h` and `positions.h` are byte-identical between the two directories;
-`features.h` differs (streaming adds `featureCount` and `featureMap`). A
-calibration fix must be applied in both directories — there is no shared
-include path. The streaming sketch no longer includes `positions.h` or
-`actions.h`; they remain only because they are shared with the offline demo.
+`actions.h` is byte-identical between the two directories; `positions.h` differs
+only by an unused `BORED 103` in the streaming copy, and `features.h` differs
+(streaming adds `featureCount` and `featureMap`). A calibration fix must be
+applied in both directories — there is no shared include path. The streaming
+sketch includes only `features.h` of the three; `positions.h` and `actions.h`
+remain in that directory because they are shared with the offline demo.
 
 ## Known behavioral gaps
 

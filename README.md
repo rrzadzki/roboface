@@ -139,7 +139,7 @@ code actually uses:
 | 200 | 977 | 0.98 | Mouth **closed** |
 | 240 | 1,172 | 1.17 | Left upper lid **open** |
 | 250 | 1,221 | 1.22 | Right lower lid **closed** |
-| 280 | 1,367 | 1.37 | All four lids **closed** |
+| 280 | 1,367 | 1.37 | Left upper, left lower, and right upper lids **closed** |
 | 320 | 1,563 | 1.56 | Right upper lid **open** |
 | 330 | 1,611 | 1.61 | Left lower lid **open** |
 | 450 | 2,197 | 2.20 | Mouth **open** |
@@ -181,11 +181,11 @@ Five features. Each one is one servo, on one channel:
 | 3 | `RIGHT_EYE_UPPER_LID` | Top of the right eye |
 | 4 | `RIGHT_EYE_LOWER_LID` | Bottom of the right eye |
 
-Three of those five numbers are **backwards** compared to the others. For the
-left upper lid, "open" is the *lower* count (240) and "closed" is the *higher*
-count (280). That is not a bug. It is because whoever built the face clipped the
-horn onto that servo rotated, so the lid sweeps the other way. The code has to
-describe reality, so reality is in the file.
+Two of those five numbers are **backwards** compared to the others: the left
+upper lid (open 240, closed 280) and the right lower lid (open 190, closed 250).
+That is not a bug. It is because whoever built the face clipped those horns on
+rotated, so those lids sweep the other way. The code has to describe reality, so
+reality is in the file.
 
 That file is `features.h`. It is the one place in this project that decides what
 every number means, and it is the first file to open if anything moves the wrong
@@ -204,10 +204,13 @@ places at once**, and they have to agree:
 If you reorder `features.h` and do not move a single wire, one servo suddenly
 gets the other's commands. Nothing errors. It just becomes a different face.
 
-And note this sharp edge: **`actions.h` and `positions.h` are duplicated, and
-`features.h` is a near-duplicate, with one copy in each directory.** There is no
-shared include folder. A calibration fix has to be made in **both** directories
-or the two programs will disagree about what 280 means.
+And note this sharp edge: **`actions.h` is byte-identical in both directories,
+and `positions.h` and `features.h` are near-duplicates, with one copy in each
+directory.** (`positions.h` currently differs by an unused `BORED 103` in the
+streaming copy, and `features.h` by the streaming sketch's `featureCount` and
+`featureMap`.) There is no shared include folder. A calibration fix has to be
+made in **both** directories or the two programs will disagree about what 280
+means.
 
 ---
 
@@ -235,7 +238,7 @@ Feature::mapMe()   maps 0x00 - 0xff onto this feature's own range
 A useful thing about the way `featureMap` is written: **every row is
 `{ CLOSED, OPEN }`**, in that order, for all five features. So sending `0xff`
 always means "as open as this feature can go" and `0x00` always means "as closed
-as it can go", even for the three features whose numbers run backwards. The
+as it can go", even for the two features whose numbers run backwards. The
 firmware handles the inversion. That is a real design decision, and it is why the
 Python scripts never need to know about it.
 
@@ -272,7 +275,7 @@ A path that will not damage anything.
    same process with more instructions.
 2. Wire up the driver board and the servos. With the power supply **off** while
    you do it. Plug in the Uno, not the servos.
-3. Open [`roboface-offline-demo/roboface-setup.ino`](roboface-offline-demo/README.md),
+3. Open [`roboface-offline-demo/roboface-offline-demo.ino`](roboface-offline-demo/README.md),
    pick **Tools → Board → Arduino Uno**, press Upload.
 4. Open *Tools → Serial Monitor*. Set it to **9600** baud and the line ending to
    **Newline**. Type `2` and press enter. You should see a confirmation.
@@ -364,7 +367,8 @@ early will save you from trying to make a servo do a job it cannot hold.
 - Developer and agent notes live in [`AGENTS.md`](AGENTS.md). The module READMEs
   repeat the parts a beginner needs.
 - The two sketches share no code at all. They share nothing but the shape of the
-  problem, and `actions.h` and `positions.h` are byte-identical copies (the
-  streaming sketch no longer includes them).
+  problem, and each directory carries its own copy of `actions.h`,
+  `positions.h`, and `features.h`. The streaming sketch includes only
+  `features.h` of the three.
 - `roboface-streaming/README.md` documents the wire protocol and the remaining
   design notes.
