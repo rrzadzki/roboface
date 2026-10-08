@@ -4,10 +4,14 @@ This is the real roboface. A computer on the other end of the USB cable sends it
 frames of positions, and the face glides from one to the next over a fixed amount
 of time. That is how you get a blink that looks like a blink instead of a slap.
 
-It replaces the offline demo in
-[`../roboface-offline-demo/`](../roboface-offline-demo/README.md) rather than
+It replaces the remote control in
+[`remote/`](../../../remote/firmware/roboface-remote-firmware/README.md) rather than
 running alongside it. Same face, same servos, same five channels. The difference
 is where the instructions come from: your fingers on a keyboard, versus a script.
+
+This page covers the **firmware**, the sketch that runs on the Uno. The scripts
+that run on your computer and send it frames are documented in
+[`../../controller/README.md`](../../controller/README.md).
 
 ## It compiles now
 
@@ -21,33 +25,28 @@ and tweens the face between them. Build it with the Arduino IDE (**Tools → Boa
 
 | File | What it is |
 |---|---|
-| `roboface-streaming.ino` | The whole program: serial parsing, the frame queue, playback. |
+| `roboface-streaming-firmware.ino` | The whole program: serial parsing, the frame queue, playback. |
 | `Feature.h` / `Feature.cpp` | A class. One of these per servo. Knows its channel, its limits, and how to move itself. |
 | `features.h` | Which channel each feature is on, and its open/closed positions, plus `featureMap` and `featureCount`. **The important file.** |
-| `positions.h` | Copy of the offline demo's. Not included by this sketch. |
-| `actions.h` | Copy of the offline demo's. Not included by this sketch. |
-| `serial_protocol.py` | Shared wire helpers: control bytes, frame encoding, port selection. |
-| `driver.py` | Interactive CLI. Build frames by hand and transmit them. |
-| `playback.py` | A scripted jaw movement with automatic blinking. |
-| `live_audio.py` | Drives the mouth from how loud the room is. Reads the microphone. |
-| `send_serial.py` | A scratch file for poking at the serial port. Not a tool. |
+| `positions.h` | Copy of the remote's, plus an unused `BORED 103`. Not included by this sketch. |
+| `actions.h` | Byte-identical copy of the remote's. Not included by this sketch. |
 
 Everything about hardware, wiring, and what a servo is lives in
-[`../README.md`](../README.md). This page assumes you have read that.
+[the root README](../../../README.md). This page assumes you have read that.
 
 ### The duplicated files
 
-`actions.h` and `positions.h` are **byte-identical copies** of the ones in the
-offline demo. `features.h` is a near-copy with two extra things: `featureCount`
-and `featureMap`. There is no shared include folder, so a calibration change has
-to be made in both directories. This is a known annoyance, not a design choice
-you should imitate.
+`actions.h` is a **byte-identical copy** of the one in the remote sketch, and
+`positions.h` differs only by the unused `BORED 103`. `features.h` is a near-copy
+with two extra things: `featureCount` and `featureMap`. There is no shared include
+folder, so a calibration change has to be made in both firmware sketches. This is
+a known annoyance, not a design choice you should imitate.
 
 ---
 
 ## Install the libraries
 
-More than the offline demo needs. All from *Sketch → Include Library → Manage
+More than the remote sketch needs. All from *Sketch → Include Library → Manage
 Libraries...* in the Arduino IDE:
 
 | Search for | Used by |
@@ -104,10 +103,10 @@ servos, either shorten those two arrays or move to a board with more RAM.
 
 ### The unit: 0x00 to 0xff
 
-This is the part that differs from the offline demo, and the part worth
+This is the part that differs from the remote sketch, and the part worth
 understanding before touching anything.
 
-The offline demo takes **raw pulse counts**, the 150-to-600 numbers that map
+The remote sketch takes **raw pulse counts**, the 150-to-600 numbers that map
 directly onto servo pulses. This sketch takes a **normalized** number from 0 to
 255 instead, and each feature scales that into its own range.
 
@@ -134,7 +133,7 @@ int featureMap[5][2] = {
 };
 ```
 
-Three of those five rows run backwards, because those horns are clipped on
+Two of those five rows run backwards, because those horns are clipped on
 flipped. The order of the columns is what matters, not the order of the numbers,
 and `map()` handles the inversion without being told. The useful consequence:
 
@@ -227,78 +226,13 @@ The sketch has three operating modes, switched by the wire bytes above.
 
 ---
 
-## Run it from Python
+## Sending it frames
 
-The four `.py` files are **senders**. They share `serial_protocol.py` for the
-wire format and port selection, and each is guarded with
-`if __name__ == '__main__'`, so importing one no longer starts it. Only one can
-hold the port at a time, so only one can run at a time.
-
-### Set up
-
-```
-python -m pip install pyserial
-```
-
-`live_audio.py` additionally needs `pyaudio` and `numpy`. Those are harder to
-install than they should be, because PyAudio has to build PortAudio first. On
-Windows this is a known annoyance. Treat `live_audio.py` as a later project.
-
-### Before anything else
-
-- **Close the Arduino Serial Monitor.** It holds the port and your script will
-  fail to open it with a permission error. This is the single most common
-  failure.
-- **Check the port name.** The port defaults to `COM4` and can be overridden
-  with the `ROBOFACE_PORT` environment variable. If your Uno is on `COM3` or
-  `COM7`, find out from the Arduino IDE's *Tools → Port* menu and set
-  `ROBOFACE_PORT` accordingly.
-- **Upload the firmware first.** These scripts do nothing without it.
-
-### `driver.py` — build frames by hand
-
-The most useful of the four, and the one to start with. It is a prompt loop.
-
-```
-50          set the current feature to 50% and move to the next one
-s           skip to the next feature without setting it
-b           go back to the previous feature
-f           finish this frame and start a new one
-t           transmit every buffered frame
-p           send PLAY
-x           quit
-```
-
-Walk through it: set a number, press `s` to skip past anything you do not care
-about, `f` when the five features are set, then `t` and `p`. It prints the byte
-array before sending it, which is the fastest way to learn the protocol, and you
-can copy that same byte array into a serial terminal instead of running the
-script at all.
-
-Values are percent, 0 to 100, mapped onto the full 0-255 range.
-
-### `playback.py` — a scripted performance
-
-A hardcoded list of twenty mouth positions that walks up and down, with the eyes
-blinking every few frames. It sends each position as a proper length-prefixed
-frame, then sends `PLAY`, so on its own it moves the face. It is a demo of what
-the protocol looks like from the outside, not a finished piece.
-
-### `live_audio.py` — the mouth follows the room
-
-Opens the microphone, measures how loud it is, and sends that as the mouth
-position. It is the prototype for a face that reacts to being spoken to, which is
-a real animatronics skill and the most interesting idea in this directory.
-
-It reads only channel 0, so it only ever moves the mouth. Note the frame-rate
-mismatch: it sends about ten times a second while the firmware plays one frame
-per `time_per_frame`, so most frames are dropped; treat it as a sketch, not a
-finished driver.
-
-### `send_serial.py` — a scratch file
-
-Writes one valid frame (mouth and one eyelid), then prints whatever came back.
-It exists to prove the port opens, nothing more. Do not build on it.
+The firmware does nothing on its own; a computer has to send it frames. The Python
+senders (`driver.py`, `playback.py`, `live_audio.py`, `send_serial.py`) and
+their setup instructions live in [`../../controller/`](../../controller/README.md).
+Any program that speaks the protocol above will do, and the Arduino Serial Monitor
+in hex mode is enough for a first test.
 
 ---
 
@@ -332,13 +266,11 @@ it does not corrupt the wire.
    send, in hex mode, `FF 01 00 FF` (a one-pair frame: mouth to 255) followed by
    `FE` (PLAY). The mouth should glide open. The Serial Monitor is an acceptable
    stand-in for Python and removes a whole layer of debugging.
-2. **Two features at 100, 0, and 50**, on a lid and on the mouth, and watch the
-   glide.
-3. **Add an expression to `driver.py`** as a one-liner that transmits a blink and
-   a talk in sequence. Now you are animating instead of posing, and the rest of
-   this project is a matter of doing more of that.
-4. **Raise the frame rate.** Shorten `time_per_frame` and find the point where
+2. **Raise the frame rate.** Shorten `time_per_frame` and find the point where
    frames start getting dropped, then work out the limit and the fix. There is
    arithmetic in that, and it is the arithmetic of the whole design.
-5. **Use the playback modes.** Send `START_DL`, a few frames, `STOP_DL`, then
+3. **Use the playback modes.** Send `START_DL`, a few frames, `STOP_DL`, then
    `PLAY`, and watch the saved frames play back.
+
+More things to try with the Python senders are in
+[`../../controller/README.md`](../../controller/README.md#things-to-try).

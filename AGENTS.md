@@ -8,19 +8,29 @@ manifest**. Two independent Arduino sketches live side by side; they share no co
 
 ## Layout
 
-- `roboface-offline-demo/roboface-offline-demo.ino` — range-of-motion / calibration
-  sketch. Interactive over serial at **9600 baud**: `Serial.parseInt()` where
+Each program has a `firmware/` side (Arduino sketch and its headers) and, where
+one exists, a `controller/` side (PC-side Python). The Arduino IDE requires a
+sketch folder name to match its `.ino`, hence the doubled names.
+
+- `remote/firmware/roboface-remote-firmware/roboface-remote-firmware.ino` —
+  range-of-motion / calibration sketch (formerly `roboface-offline-demo`).
+  Interactive over serial at **9600 baud**: `Serial.parseInt()` where
   1-16 selects a channel, 101/102 are EYES_CLOSED/EYES_OPEN, 1001/1002 are
   BLINK/TALK, and 150-600 is a raw PWM count. Derived from Adafruit's servo
-  demo; `setServoPulse()` and `SERVOMIN/MAX` are unused leftovers.
-- `roboface-streaming/roboface-streaming.ino` — the live driver. Serial at
-  **115200 baud**. Length-prefixed frames are enqueued (streaming) or saved
-  (download mode), then dequeued and tweened into place every `time_per_frame`
-  ms (default 1000) while `playing` is true.
-- `roboface-streaming/serial_protocol.py` — shared wire helpers (control bytes,
+  demo; `setServoPulse()` and `SERVOMIN/MAX` are unused leftovers. It is driven
+  from the Serial Monitor, so there is no `remote/controller/`.
+- `streaming/firmware/roboface-streaming-firmware/roboface-streaming-firmware.ino`
+  — the live driver. Serial at **115200 baud**. Length-prefixed frames are
+  enqueued (streaming) or saved (download mode), then dequeued and tweened into
+  place every `time_per_frame` ms (default 1000) while `playing` is true. Also
+  holds `Feature.h`/`Feature.cpp` and its own `features.h`/`positions.h`/`actions.h`.
+- `streaming/controller/serial_protocol.py` — shared wire helpers (control bytes,
   frame encoding, port selection) used by the host senders.
-- `roboface-streaming/{driver,playback,live_audio,send_serial}.py` — host-side
-  senders.
+- `streaming/controller/{driver,playback,live_audio,send_serial}.py` — host-side
+  senders. They `import serial_protocol`, so keep them in one directory.
+
+READMEs: root `README.md` (hardware, beginner guide), one per firmware sketch,
+and `streaming/controller/README.md` for the Python senders.
 
 ## Build / flash
 
@@ -31,7 +41,7 @@ installed via Library Manager; none are vendored: `Adafruit_PWMServoDriver`,
 `ArduinoQueue`. Oscillator frequency is set to 27000000 to match the real
 internal oscillator, not the nominal 25 MHz.
 
-## roboface-streaming modes
+## streaming firmware modes
 
 `MODE` is an enum: `STREAMING` (default), `PLAYBACK_DL`, `PLAYBACK`. Wire
 control bytes switch between them: `START_DL` (`0xfb`) enters download,
@@ -49,7 +59,7 @@ feature silently re-points a servo.
 
 ## Two different position units — do not mix them
 
-- **Offline demo** takes and writes *raw PWM counts* straight to
+- **Remote** takes and writes *raw PWM counts* straight to
   `pwm.setPWM(channel, 0, count)` (mouth 200-450, lids 190-330).
 - **Streaming** takes a normalized 0x00-0xff value; `Feature::mapMe()` maps it
   onto that feature's own `featureMap` min/max. Host scripts speak a third
@@ -84,18 +94,19 @@ a small state machine.
 
 All four are guarded with `if __name__ == '__main__'` and share
 `serial_protocol.py` for wire encoding and port selection. The port defaults to
-`COM4` and can be overridden with the `ROBOFACE_PORT` env var. Only one script
+`COM3` and can be overridden with the `ROBOFACE_PORT` env var. Only one script
 can hold the port at a time. `live_audio.py` additionally needs `pyaudio` and
 `numpy`, and drives the mouth from mic amplitude.
 
 ## Duplicated headers
 
-`actions.h` is byte-identical between the two directories; `positions.h` differs
-only by an unused `BORED 103` in the streaming copy, and `features.h` differs
-(streaming adds `featureCount` and `featureMap`). A calibration fix must be
-applied in both directories — there is no shared include path. The streaming
-sketch includes only `features.h` of the three; `positions.h` and `actions.h`
-remain in that directory because they are shared with the offline demo.
+`actions.h` is byte-identical between the two firmware sketches; `positions.h`
+differs only by an unused `BORED 103` in the streaming copy, and `features.h`
+differs (streaming adds `featureCount` and `featureMap`). A calibration fix must
+be applied in both sketch directories — there is no shared include path. The
+streaming sketch includes only `features.h` of the three; `positions.h` and
+`actions.h` remain in that directory because they are shared with the remote
+sketch.
 
 ## Known behavioral gaps
 

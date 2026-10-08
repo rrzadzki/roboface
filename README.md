@@ -9,10 +9,10 @@ ways to control the same face:
 
 | | |
 |---|---|
-| **[`roboface-offline-demo/`](roboface-offline-demo/README.md)** | A simple remote control. You type numbers in a serial monitor and the face moves. **Start here.** It builds today. |
-| **[`roboface-streaming/`](roboface-streaming/README.md)** | The real thing. A computer sends timed frames over serial and the face glides between them. |
+| **[`remote/`](remote/firmware/roboface-remote-firmware/README.md)** | A simple remote control. You type numbers in a serial monitor and the face moves. **Start here.** It builds today. |
+| **[`streaming/`](streaming/firmware/roboface-streaming-firmware/README.md)** | The real thing. A computer sends timed frames over serial and the face glides between them. |
 
-If you have never used a programmable board before, do the offline demo first. It
+If you have never used a programmable board before, do the remote control first. It
 will teach you almost everything you need. Then, when it is working, come back
 here and read why the streaming half exists.
 
@@ -165,7 +165,7 @@ more travel than the servo can give, the gears grind and strip.
 There is no sensor. So if you send a pulse length that is too long, the servo
 sits there buzzing and grinding, and it will break. The only protection is
 choosing safe numbers yourself, which is what the calibration in
-[`roboface-offline-demo/`](roboface-offline-demo/README.md) is for.
+[`remote/firmware/roboface-remote-firmware/`](remote/firmware/roboface-remote-firmware/README.md) is for.
 
 ---
 
@@ -196,7 +196,7 @@ way.
 The channel a servo is on is decided in software, but it is decided in **three
 places at once**, and they have to agree:
 
-- `features.h` in each directory, which names the channel for each feature.
+- `features.h` in each firmware sketch, which names the channel for each feature.
 - The physical wire, which the servo is plugged into.
 - The Python scripts, which send channel numbers as raw bytes and have no idea
   what "left eyelid" means.
@@ -204,12 +204,12 @@ places at once**, and they have to agree:
 If you reorder `features.h` and do not move a single wire, one servo suddenly
 gets the other's commands. Nothing errors. It just becomes a different face.
 
-And note this sharp edge: **`actions.h` is byte-identical in both directories,
-and `positions.h` and `features.h` are near-duplicates, with one copy in each
-directory.** (`positions.h` currently differs by an unused `BORED 103` in the
+And note this sharp edge: **`actions.h` is byte-identical in both firmware
+sketches, and `positions.h` and `features.h` are near-duplicates, with one copy in
+each sketch.** (`positions.h` currently differs by an unused `BORED 103` in the
 streaming copy, and `features.h` by the streaming sketch's `featureCount` and
 `featureMap`.) There is no shared include folder. A calibration fix has to be
-made in **both** directories or the two programs will disagree about what 280
+made in **both** sketches or the two programs will disagree about what 280
 means.
 
 ---
@@ -221,11 +221,11 @@ is called three different things in this project.
 
 | Where | Units | Mouth closed is | Mouth open is | Who decides |
 |---|---|---|---|---|
-| Offline demo firmware | raw pulse counts | 200 | 450 | `features.h` |
+| Remote firmware | raw pulse counts | 200 | 450 | `features.h` |
 | Streaming firmware | 0 to 0xff (0 to 255) | 0x00 | 0xff | `features.h` + `Feature.cpp` |
 | Python scripts | 0 to 100 (a percentage) | 0 | 100 | the `.py` file |
 
-So "the mouth three quarters open" is `337` to the offline demo, `0xbf` to the
+So "the mouth three quarters open" is `337` to the remote firmware, `0xbf` to the
 streaming firmware, and `75` to `driver.py`. Three numbers, one position.
 
 The streaming firmware is where the translation happens. A `Feature` object
@@ -275,16 +275,16 @@ A path that will not damage anything.
    same process with more instructions.
 2. Wire up the driver board and the servos. With the power supply **off** while
    you do it. Plug in the Uno, not the servos.
-3. Open [`roboface-offline-demo/roboface-offline-demo.ino`](roboface-offline-demo/README.md),
+3. Open [`remote/firmware/roboface-remote-firmware/roboface-remote-firmware.ino`](remote/firmware/roboface-remote-firmware/README.md),
    pick **Tools → Board → Arduino Uno**, press Upload.
 4. Open *Tools → Serial Monitor*. Set it to **9600** baud and the line ending to
    **Newline**. Type `2` and press enter. You should see a confirmation.
 5. Now calibrate, carefully. The
-   [offline demo README](roboface-offline-demo/README.md#calibrating-a-servo)
+   [remote README](remote/firmware/roboface-remote-firmware/README.md#calibrating-a-servo)
    has the exact procedure. The short version: hold a lid, nudge the number up by
    5 or 10 at a time, stop the moment you feel the servo fight you, back off, and
    write that number down.
-6. Write your numbers into `features.h`. **In both directories.**
+6. Write your numbers into `features.h`. **In both firmware sketches.**
 
 After that, the interesting part starts.
 
@@ -294,7 +294,7 @@ After that, the interesting part starts.
 
 | Symptom | Probably |
 |---|---|
-| The Serial Monitor shows nothing at all | Wrong baud rate, or wrong port, or the line ending is not set to Newline. The two sketches use different rates: **9600** for the offline demo, **115200** for streaming. |
+| The Serial Monitor shows nothing at all | Wrong baud rate, or wrong port, or the line ending is not set to Newline. The two sketches use different rates: **9600** for the remote control, **115200** for streaming. |
 | The Serial Monitor shows `?` or garbage | Baud rate does not match the sketch. |
 | A servo shakes or buzzes continuously | It is at its mechanical stop. Immediately send a number closer to the middle of its range. |
 | The board resets when the servos move | Not enough power for the servos. Move them onto the external supply, and check the common ground wire. |
@@ -327,7 +327,7 @@ After that, the interesting part starts.
 The goal is animatronics, so here is the honest order in which things become
 possible.
 
-**Now.** The offline demo is a full remote control for every servo. Every
+**Now.** The remote firmware is a full remote control for every servo. Every
 expression you can think of, you can do from a keyboard: blinks, a yawn, a laugh,
 a slow menacing squint. `actions.h` already has a table of mouth movements and a
 timing grid. Adding a new one is a small edit.
@@ -336,10 +336,10 @@ timing grid. Adding a new one is a small edit.
 Eyebrows are the obvious next feature and they change a face more than almost
 anything else you can add. Then a jaw that moves forward as well as up and down.
 A PCA9685 supports it, and all you have to do is add rows to `features.h` in both
-directories. Just be careful: the PWM driver can supply more current than the
+firmware sketches. Just be careful: the PWM driver can supply more current than the
 board's traces are built for, so power the servos from the supply.
 
-**Then.** Real reactions. `live_audio.py` in the streaming directory is a
+**Then.** Real reactions. `live_audio.py` in `streaming/controller/` is a
 prototype that opens the microphone and drives the mouth from how loud the room
 is. It is unfinished and awkward, but the idea is sound and the hard part, audio
 input, is already solved. Blink on a loud sound. Lean forward when someone
@@ -367,8 +367,9 @@ early will save you from trying to make a servo do a job it cannot hold.
 - Developer and agent notes live in [`AGENTS.md`](AGENTS.md). The module READMEs
   repeat the parts a beginner needs.
 - The two sketches share no code at all. They share nothing but the shape of the
-  problem, and each directory carries its own copy of `actions.h`,
+  problem, and each sketch carries its own copy of `actions.h`,
   `positions.h`, and `features.h`. The streaming sketch includes only
   `features.h` of the three.
-- `roboface-streaming/README.md` documents the wire protocol and the remaining
-  design notes.
+- `streaming/firmware/roboface-streaming-firmware/README.md` documents the wire
+  protocol and the remaining firmware design notes; the Python senders are
+  documented in `streaming/controller/README.md`.

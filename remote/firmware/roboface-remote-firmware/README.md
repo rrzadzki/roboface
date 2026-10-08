@@ -1,4 +1,4 @@
-# Offline demo: the remote control
+# Remote: the remote control
 
 **Start here.** This is the program to learn on.
 
@@ -7,10 +7,10 @@ moves to that position. No computer, no Python, no timing. You are the animation
 system.
 
 It is also the calibration tool. The other program,
-[`roboface-streaming/`](../roboface-streaming/README.md), is the live driver
+[`streaming/`](../../../streaming/firmware/roboface-streaming-firmware/README.md), is the live driver
 that glides between frames sent from a computer.
 
-Read [`../README.md`](../README.md) first for the hardware, the wiring, and what
+Read [the root README](../../../README.md) first for the hardware, the wiring, and what
 a servo actually is. This page assumes you have that.
 
 ---
@@ -19,14 +19,14 @@ a servo actually is. This page assumes you have that.
 
 | File | What it is |
 |---|---|
-| `roboface-offline-demo.ino` | The whole program. |
+| `roboface-remote-firmware.ino` | The whole program. |
 | `features.h` | Which channel each feature is on, and its open/closed positions. **The important file.** |
 | `positions.h` | Two preset commands: `EYES_CLOSED` and `EYES_OPEN`. |
 | `actions.h` | The `talk` and `blink` commands, and the mouth movement table behind `talk`. |
 
 The sketch is derived from Adafruit's demo for their PWM servo board, so if you
 have seen that one, this will look familiar. Read
-[`../README.md#how-a-servo-actually-works`](../README.md#how-a-servo-actually-works)
+[the root README's servo section](../../../README.md#how-a-servo-actually-works)
 if you have not.
 
 ---
@@ -40,7 +40,7 @@ straight to step 4.
 Manage Libraries...*, search for `Adafruit PWM Servo Driver Library`, and click
 Install. It is the only library this sketch needs.
 
-**2. Open the sketch.** *File → Open*, then pick `roboface-offline-demo.ino`.
+**2. Open the sketch.** *File → Open*, then pick `roboface-remote-firmware.ino`.
 The IDE opens the folder containing it, which is what you want.
 
 **3. Pick the board.** *Tools → Board → Arduino Uno*. Then check
@@ -163,7 +163,7 @@ Then do the other four: mouth, left upper, right upper, right lower.
 ### Write it down in two places
 
 **Both copies.** `features.h` exists twice, once in this directory and once in
-[`../roboface-streaming/`](../roboface-streaming/README.md). They are not linked.
+[`streaming/`](../../../streaming/firmware/roboface-streaming-firmware/README.md). They are not linked.
 A calibration fix in one and not the other means the two programs will disagree
 about what 280 means, and you will find that out weeks from now.
 
@@ -183,7 +183,7 @@ Keep them in sync, or note the difference if you deliberately diverge.
 | `RIGHT_EYE_LOWER_LID_CLOSED 250` | 250 | about 1.22 ms |
 | `RIGHT_EYE_LOWER_LID_OPEN 190` | 190 | about 0.93 ms |
 
-Full table in [`../README.md#what-the-numbers-mean`](../README.md#what-the-numbers-mean).
+Full table in [the root README](../../../README.md#what-the-numbers-mean).
 
 You will notice that two of the five run **backwards**: the left upper lid
 (`OPEN 240`, `CLOSED 280`) and the right lower lid (`OPEN 190`, `CLOSED 250`).
@@ -210,7 +210,7 @@ and it hands back the integer 450. It waits for a newline, which is why the line
 ending setting matters.
 
 **A chain of `if` / `else if` decides what the number meant.** Read the chain in
-`roboface-offline-demo.ino` from the top. It tests, in order: is this a channel
+`roboface-remote-firmware.ino` from the top. It tests, in order: is this a channel
 number? is this a preset? is this a raw position? is this an action? The four
 ranges it accepts — `1` to `16`, `101` to `149`, `150` to `600`, and `1001` to
 `1099` — never overlap, so every number you type lands in at most one of them.
@@ -276,7 +276,7 @@ In rough order of how much they teach you.
 1. **Retune `talk_map`.** Make the mouth chatter faster, or make `talk()` last
    twice as long by raising the outer loop's count from 5 to 10. The table itself
    is a five-number edit; `talk_map` lives in `actions.h`, which is duplicated in
-   [`../roboface-streaming/`](../roboface-streaming/README.md) — change both
+   [`streaming/`](../../../streaming/firmware/roboface-streaming-firmware/README.md) — change both
    copies, or note the difference.
 2. **Add a preset.** Suppose you want a "perked" look, eyes open and jaw slightly
    open. Add `#define PERKED 103` to `positions.h` in both directories (the
@@ -300,6 +300,6 @@ In rough order of how much they teach you.
    order of the existing five, or you will repoint every servo at once.
 
 When you are comfortable with all of that, read
-[`../roboface-streaming/README.md`](../roboface-streaming/README.md). It is the
+[`streaming/firmware/roboface-streaming-firmware/README.md`](../../../streaming/firmware/roboface-streaming-firmware/README.md). It is the
 same face, driven by a computer instead of your fingers, and it is where
 expressions stop being typed one at a time and start being played as a sequence.
