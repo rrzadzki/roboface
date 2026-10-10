@@ -5,19 +5,12 @@ Feature::Feature() {
   minPos = 0;
   maxPos = 0;
   pos = 0;
-  tween = nullptr;
   pwm = nullptr;
 }
 
 Feature::Feature(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum)
-  : channel(0), minPos(0), maxPos(0), pos(0), tween(nullptr), pwm(nullptr) {
+  : channel(0), minPos(0), maxPos(0), pos(0), pwm(nullptr) {
   setAll(pwmD, chan, minimum, maximum);
-}
-
-Feature::~Feature() {
-  if (tween) {
-    delete tween;
-  }
 }
 
 void Feature::setAll(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int maximum) {
@@ -25,26 +18,21 @@ void Feature::setAll(Adafruit_PWMServoDriver *pwmD, int chan, int minimum, int m
   minPos = minimum;
   maxPos = maximum;
   pos = minimum;
-  if (tween) {
-    delete tween;
-    tween = nullptr;
-  }
   pwm = pwmD;
 }
 
-void Feature::setTarget(int to, long ms) {
+void Feature::setTarget(Tween::Timeline &timeline, int to, long ms) {
   // "to" is a value 0 through 255; map it onto this feature's range.
-  if (tween) {
-    delete tween;
-  }
-  tween = TweenDuino::Tween::to(pos, ms, mapMe(to));
+  // Start from wherever the feature is now.
+  timeline.add(pos)
+    .init(pos)
+    .then((float)mapMe(to), ms);
 }
 
-void Feature::updatePWM() {
-  if (!tween) {
+void Feature::writePWM() {
+  if (!pwm) {
     return;
   }
-  tween->update(millis());
   pwm->setPWM(channel, 0, (int)pos);
 }
 

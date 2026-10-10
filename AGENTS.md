@@ -37,9 +37,21 @@ and `streaming/controller/README.md` for the Python senders.
 Open the `.ino` in the Arduino IDE and upload with the board you have wired up.
 The target is an **Arduino Uno** (`arduino:avr:uno`). These libraries must be
 installed via Library Manager; none are vendored: `Adafruit_PWMServoDriver`,
-`TweenDuino` (brings its own `Tween`/`Timeline`, and depends on `Easing`),
-`ArduinoQueue`. Oscillator frequency is set to 27000000 to match the real
-internal oscillator, not the nominal 25 MHz.
+`Tween` by hideakitai (Library Manager auto-installs its dependencies
+`ArxContainer`, `ArxSmartPtr`, `ArxTypeTraits`, `Easing`, `PollingTimer`),
+`ArduinoQueue`. TweenDuino must be uninstalled: it also ships a `Tween.h` and
+can shadow the hideakitai header. Oscillator frequency is set to 27000000 to
+match the real internal oscillator, not the nominal 25 MHz.
+
+Tweening uses one shared `Tween::Timeline` in the streaming `.ino`. Each frame
+does `timeline.clear()`, then `Feature::setTarget(timeline, ...)` per feature
+(`add(pos).init(pos).then(target, ms)`), then `timeline.start()`; `loop()`
+calls `timeline.update()` before `Feature::writePWM()`. `Feature.h` defines
+`ARX_MAP_DEFAULT_SIZE` (5, must be >= `featureCount`, enforced by a
+`static_assert`) and `ARX_VECTOR_DEFAULT_SIZE` (1) before including `Tween.h`
+to keep heap use down on the Uno; this heap is not shown in the IDE's
+memory report. Adding a feature means raising the map size; chaining more
+than one `then()` per sequence means raising the vector size.
 
 ## streaming firmware modes
 

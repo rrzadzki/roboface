@@ -3,6 +3,7 @@
 #include <Adafruit_PWMServoDriver.h>
 #include "features.h"
 #include "Feature.h"
+#include <Tween.h> // must come after Feature.h, which sets the ARX container sizes
 
 /*************************************************** 
   Roboface firmware. Receives length-prefixed frames
@@ -33,6 +34,11 @@ struct frame { unsigned char positions[featureCount]; };
 
 // All the face's features. The order of this array MUST match features.h.
 Feature features[featureCount];
+
+// One timeline tweens every feature. It is cleared and rebuilt for each frame.
+static_assert(ARX_MAP_DEFAULT_SIZE >= featureCount,
+              "ARX_MAP_DEFAULT_SIZE in Feature.h must hold one Sequence per feature");
+Tween::Timeline timeline;
 
 // The time used to tween from one frame to the next.
 unsigned long time_per_frame = 1000;
@@ -171,17 +177,20 @@ void playFrames() {
     }
 
     if (haveFrame) {
+      timeline.clear();
       for (int i = 0; i < featureCount; i++) {
-        features[i].setTarget(f.positions[i], time_per_frame);
+        features[i].setTarget(timeline, f.positions[i], time_per_frame);
       }
+      timeline.start();
       last_frame_start = millis();
     } else {
       playing = false;
     }
   }
 
+  timeline.update();
   for (int i = 0; i < featureCount; i++) {
-    features[i].updatePWM();
+    features[i].writePWM();
   }
 }
 
@@ -195,10 +204,12 @@ void setup() {
   pwm.setOscillatorFrequency(27000000);
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
 
+  timeline.clear();
   for (int i = 0; i < featureCount; i++) {
     features[i].setAll(&pwm, i, featureMap[i][0], featureMap[i][1]);
-    features[i].setTarget(0, time_per_frame);
+    features[i].setTarget(timeline, 0, time_per_frame);
   }
+  timeline.start();
 }
 
 void loop() {

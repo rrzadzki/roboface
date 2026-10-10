@@ -257,11 +257,14 @@ IDE, not by downloading files:
 | Library name to search for | Needed by | Brings in |
 |---|---|---|
 | `Adafruit PWM Servo Driver Library` | both | Adafruit's driver for the PCA9685 |
-| `TweenDuino` | streaming only | `Tween` and `Timeline`, for smooth motion |
+| `Tween` (by hideakitai) | streaming only | `Timeline`, for smooth motion |
 | `ArduinoQueue` | streaming only | the queue library |
 
-`Adafruit PWM Servo Driver Library` may ask to install a couple of dependencies.
-Say yes.
+`Adafruit PWM Servo Driver Library` and `Tween` may ask to install a few
+dependencies. Say yes (or "Install all").
+
+If you previously installed `TweenDuino`, uninstall it. It has its own
+`Tween.h` that can get picked up instead of the right one.
 
 ---
 

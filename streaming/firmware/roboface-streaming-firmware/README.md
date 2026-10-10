@@ -52,8 +52,11 @@ Libraries...* in the Arduino IDE:
 | Search for | Used by |
 |---|---|
 | `Adafruit PWM Servo Driver Library` | the driver board |
-| `TweenDuino` | smooth motion. Brings in `Tween` and `Timeline`. |
+| `Tween` (by hideakitai) | smooth motion, via `Tween::Timeline`. Choose "Install all" to get its dependencies. |
 | `ArduinoQueue` | the frame queue |
+
+If `TweenDuino` is installed, uninstall it first. It also has a `Tween.h`, and
+the IDE may pick up the wrong one.
 
 Then **Tools → Board → Arduino Uno**, and upload.
 
@@ -74,7 +77,7 @@ milliseconds (1000 by default, so one second per frame).
 A **tween** is what makes the motion smooth. Instead of jumping the servo from
 wherever it is to the new number, a tween works out what the position should be
 right now, partway through, and updates it. That is why the face glides. The
-TweenDuino library does the arithmetic; you never write it.
+Tween library does the arithmetic; you never write it.
 
 ```
    computer                 the face
@@ -154,27 +157,36 @@ One `Feature` per servo, in an array of five, set up in `setup()` from
 - its `channel`, which output on the driver board it is plugged into
 - its `minPos` and `maxPos`, the raw counts for closed and open
 - its `pwm`, a pointer to the driver board, so it can move itself
-- a `tween`, which is what makes it move smoothly
+- its `pos`, the current position, which the shared `timeline` moves smoothly
+
+The tweening itself lives in one `Tween::Timeline` called `timeline`, shared by
+all five features. For every frame the sketch clears it, adds one tween per
+feature, and starts it again.
 
 The methods you will use:
 
 | Method | What it does |
 |---|---|
 | `setAll(pwm, chan, min, max)` | Tell it everything. Called once at startup. |
-| `setTarget(to, ms)` | Tween to a `0x00`-`0xff` position over `ms` milliseconds. |
-| `updatePWM()` | Ask the tween where we are now, and write it to the servo. Called every loop. |
+| `setTarget(timeline, to, ms)` | Add a tween to a `0x00`-`0xff` position over `ms` milliseconds to `timeline`. Clear the timeline before, start it after. |
+| `writePWM()` | Write the current position to the servo. Called every loop, after `timeline.update()`. |
 
 Two design notes that will save you time later:
 
-**The loop does the work.** `updatePWM()` is called for all five features on
-every pass through `loop()`, but only while `playing` is true. When the face is
-idle, the firmware is not writing to the servos at all. That is deliberate: the
-servos hold their own position, and the I2C traffic is not free.
+**The loop does the work.** `timeline.update()` and `writePWM()` run for all
+five features on every pass through `loop()`, but only while `playing` is true.
+When the face is idle, the firmware is not writing to the servos at all. That is
+deliberate: the servos hold their own position, and the I2C traffic is not free.
 
-**A `Feature` allocates.** `setTarget()` frees the old tween and makes a new one,
-so a full-speed frame costs five allocations and frees. At one frame per second
-that is nothing. If you ever shorten `time_per_frame` a lot, it becomes a
-reason to be careful.
+**The timeline allocates, and its size is fixed.** Each frame, `timeline.clear()`
+frees five sequences and `setTarget()` allocates five new ones. At one frame per
+second that is nothing; if you ever shorten `time_per_frame` a lot, it becomes a
+reason to be careful. To fit in the Uno's memory, `Feature.h` shrinks the
+library's containers: `ARX_MAP_DEFAULT_SIZE` is 5 (one slot per feature) and
+`ARX_VECTOR_DEFAULT_SIZE` is 1 (one tween per feature). Add a sixth feature and
+you must raise the first; the sketch's `static_assert` will refuse to compile
+until you do. This memory comes from the heap, so the IDE's "global variables"
+number does not include it.
 
 ---
 
